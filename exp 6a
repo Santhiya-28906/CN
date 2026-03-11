@@ -1,0 +1,73 @@
+import java.io.*;
+import java.net.*;
+import java.util.*;
+
+public class CombinedARP {
+    // We use a port that is unlikely to be used by other apps
+    private static final int PORT = 12345;
+
+    public static void main(String[] args) {
+        // 1. Start the Server in a separate Thread
+        Thread serverThread = new Thread(() -> startServer());
+        serverThread.start();
+
+        // Give the server a small head start to bind to the port
+        try { Thread.sleep(1000); } catch (InterruptedException e) {}
+
+        // 2. Start the Client logic in the main thread
+        startClient();
+    }
+
+    private static void startServer() {
+        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+            System.out.println("[Server] Running... Waiting for ARP request.");
+            
+            // This loop allows the server to handle multiple requests
+            while (true) {
+                try (Socket connection = serverSocket.accept();
+                     BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                     PrintWriter out = new PrintWriter(connection.getOutputStream(), true)) {
+
+                    String requestedIP = in.readLine();
+                    
+                    // Mock ARP Table
+                    Map<String, String> arpTable = new HashMap<>();
+                    arpTable.put("165.165.80.80", "6A:08:AA:C2");
+                    arpTable.put("165.165.79.1", "8A:BC:E3:FA");
+
+                    String macResponse = arpTable.getOrDefault(requestedIP, "Address Not Found");
+                    out.println(macResponse);
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("[Server Error] Check if port " + PORT + " is free: " + e.getMessage());
+        }
+    }
+
+    private static void startClient() {
+        try (Scanner scanner = new Scanner(System.in)) {
+            System.out.println("[Client] Started.");
+            
+            while (true) {
+                System.out.print("\nEnter IP to lookup (or 'exit' to quit): ");
+                String ip = scanner.nextLine();
+
+                if (ip.equalsIgnoreCase("exit")) break;
+
+                // Create a new socket for each request to the server
+                try (Socket socket = new Socket("127.0.0.1", PORT);
+                     PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+
+                    out.println(ip);
+                    String response = in.readLine();
+                    System.out.println("[Client] Received Physical Address: " + response);
+                } catch (IOException e) {
+                    System.err.println("[Client Error] Could not connect: " + e.getMessage());
+                }
+            }
+        }
+        System.out.println("Program terminated.");
+        System.exit(0);
+    }
+}
